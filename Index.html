@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>競馬予想＆シミュレーション</title>
+  <style>
+    :root {
+      --primary: #1b5e20;
+      --secondary: #d84315;
+      --accent: #ffb300;
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --text: #ffffff;
+      --subtext: #b0bec5;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Helvetica Neue', Arial, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding-bottom: 70px; }
+    header { background-color: var(--primary); padding: 15px; text-align: center; border-bottom: 3px solid var(--accent); }
+    h1 { font-size: 1.4rem; color: #fff; }
+    .nav-tabs { display: flex; background: #2c2c2c; overflow-x: auto; position: sticky; top: 0; z-index: 100; }
+    .tab-btn { flex: 1; min-width: 70px; padding: 12px 8px; background: none; border: none; color: var(--subtext); font-weight: bold; cursor: pointer; text-align: center; font-size: 0.85rem; }
+    .tab-btn.active { color: var(--accent); border-bottom: 3px solid var(--accent); background: #383838; }
+    .container { padding: 15px; max-width: 800px; margin: 0 auto; display: none; }
+    .container.active { display: block; }
+    
+    /* チップステータスバー */
+    .chip-bar { background: linear-gradient(135deg, #2e7d32, #1b5e20); padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border: 1px solid #4caf50; }
+    .chip-val { font-size: 1.4rem; font-weight: bold; color: var(--accent); }
+    
+    /* 出走表 */
+    .horse-card { background: var(--card-bg); border-radius: 8px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; border-left: 5px solid var(--accent); }
+    .horse-img { width: 70px; height: 70px; border-radius: 6px; object-fit: cover; background: #333; }
+    .horse-info { flex: 1; }
+    .horse-name { font-weight: bold; font-size: 1.1rem; }
+    .horse-sub { font-size: 0.8rem; color: var(--subtext); margin-top: 4px; }
+    .mark-btns button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid #555; background: #333; color: white; margin-left: 2px; cursor: pointer; }
+    .mark-btns button.active { background: var(--accent); color: black; font-weight: bold; }
+
+    /* メディア設定 */
+    .media-box { background: var(--card-bg); padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+    input[type="file"] { margin-top: 8px; color: var(--subtext); }
+
+    /* 馬券購入 */
+    .bet-group { background: var(--card-bg); padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+    select, input[type="number"] { width: 100%; padding: 10px; margin-top: 8px; background: #2a2a2a; color: white; border: 1px solid #444; border-radius: 5px; }
+    .btn { width: 100%; padding: 12px; background: var(--secondary); color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 10px; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
+
+    /* テーブル */
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; background: var(--card-bg); font-size: 0.9rem; }
+    th, td { padding: 10px; border: 1px solid #333; text-align: center; }
+    th { background: #2a2a2a; color: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🏇 競馬予想＆シミュレーション</h1>
+  </header>
+
+  <!-- チップ残高表示 -->
+  <div style="padding: 10px 15px 0;">
+    <div class="chip-bar">
+      <div>持参チップ: <span id="chip-count" class="chip-val">50</span> 枚</div>
+      <button onclick="resetChips()" style="padding: 5px 10px; background:#444; color:white; border:none; border-radius:4px; cursor:pointer;">リセット</button>
+    </div>
+  </div>
+
+  <!-- ナビゲーション -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab(0)">出走表/予想</button>
+    <button class="tab-btn" onclick="switchTab(1)">固定オッズ</button>
+    <button class="tab-btn" onclick="switchTab(2)">馬券購入</button>
+    <button class="tab-btn" onclick="switchTab(3)">レース結果</button>
+    <button class="tab-btn" onclick="switchTab(4)">メディア設定</button>
+  </div>
+
+  <!-- タブ1: 出走表・予想 -->
+  <div class="container active">
+    <div id="media-preview-area" style="margin-bottom: 15px;"></div>
+    <div id="horse-list"></div>
+  </div>
+
+  <!-- タブ2: 固定オッズ -->
+  <div class="container">
+    <h3>単勝固定オッズ</h3>
+    <table>
+      <thead><tr><th>馬番</th><th>馬名</th><th>単勝オッズ</th></tr></thead>
+      <tbody id="odds-table-body"></tbody>
+    </table>
+  </div>
+
+  <!-- タブ3: 馬券購入 -->
+  <div class="container">
+    <div class="bet-group">
+      <h3>単勝（1着当て）</h3>
+      <select id="single-horse"></select>
+      <input type="number" id="single-chips" value="5" min="1" placeholder="賭けるチップ数">
+      <button class="btn" onclick="buySingle()">単勝を購入</button>
+    </div>
+
+    <div class="bet-group">
+      <h3>三連単（1着・2着・3着順番通り）</h3>
+      <label>1着: <select id="tri-1"></select></label>
+      <label>2着: <select id="tri-2"></select></label>
+      <label>3着: <select id="tri-3"></select></label>
+      <input type="number" id="tri-chips" value="1" min="1" placeholder="賭けるチップ数">
+      <button class="btn" onclick="buyTrifecta()">三連単を購入</button>
+    </div>
+
+    <h3>購入中の馬券</h3>
+    <table style="margin-top:10px;">
+      <thead><tr><th>種類</th><th>組番</th><th>枚数</th></tr></thead>
+      <tbody id="bets-body"></tbody>
+    </table>
+  </div>
+
+  <!-- タブ4: レース結果・精算 -->
+  <div class="container">
+    <h3>着順決定</h3>
+    <div class="bet-group">
+      <label>1着: <select id="res-1"></select></label>
+      <label>2着: <select id="res-2"></select></label>
+      <label>3着: <select id="res-3"></select></label>
+      <button class="btn" style="background:#2e7d32;" onclick="settleRace()">結果を確定して精算</button>
+    </div>
+    <div id="result-log" style="margin-top:15px;"></div>
+  </div>
+
+  <!-- タブ5: メディア設定 -->
+  <div class="container">
+    <div class="media-box">
+      <h3>レース動画 / トップ画像設定</h3>
+      <input type="file" accept="image/*,video/*" onchange="loadHeaderMedia(event)">
+    </div>
+    <div id="horse-media-inputs"></div>
+  </div>
+
+  <script>
+    let chips = 50;
+    let bets = [];
+    const horses = [
+      { id: 1, name: 'ゴールドシップ', odds: 2.5, img: 'https://images.unsplash.com/photo-1553284965-83fd3e82fa5a?w=150', mark: '' },
+      { id: 2, name: 'サイレンススズカ', odds: 3.8, img: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=150', mark: '' },
+      { id: 3, name: 'ディープインパクト', odds: 1.8, img: 'https://images.unsplash.com/photo-1598974357801-cbca10065a71?w=150', mark: '' },
+      { id: 4, name: 'トウカイテイオー', odds: 5.2, img: 'https://images.unsplash.com/photo-1508847154043-be5407fcaa5a?w=150', mark: '' }
+    ];
+
+    function init() {
+      renderHorses();
+      renderOdds();
+      populateSelects();
+      renderMediaInputs();
+    }
+
+    function switchTab(index) {
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => btn.classList.toggle('active', i === index));
+      document.querySelectorAll('.container').forEach((c, i) => c.classList.toggle('active', i === index));
+    }
+
+    function renderHorses() {
+      const list = document.getElementById('horse-list');
+      list.innerHTML = horses.map(h => `
+        <div class="horse-card">
+          <img src="${h.img}" class="horse-img" id="img-${h.id}">
+          <div class="horse-info">
+            <div class="horse-name">${h.id}. ${h.name}</div>
+            <div class="horse-sub">単勝オッズ: ${h.odds}倍</div>
+          </div>
+          <div class="mark-btns">
+            ${['◎','◯','▲','△'].map(m => `
+              <button class="${h.mark === m ? 'active' : ''}" onclick="setMark(${h.id}, '${m}')">${m}</button>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function setMark(id, mark) {
+      const h = horses.find(item => item.id === id);
+      h.mark = h.mark === mark ? '' : mark;
+      renderHorses();
+    }
+
+    function renderOdds() {
+      document.getElementById('odds-table-body').innerHTML = horses.map(h => `
+        <tr><td>${h.id}</td><td>${h.name}</td><td>${h.odds}倍</td></tr>
+      `).join('');
+    }
+
+    function populateSelects() {
+      const opts = horses.map(h => `<option value="${h.id}">${h.id}. ${h.name}</option>`).join('');
+      ['single-horse', 'tri-1', 'tri-2', 'tri-3', 'res-1', 'res-2', 'res-3'].forEach(id => {
+        document.getElementById(id).innerHTML = opts;
+      });
+    }
+
+    function buySingle() {
+      const id = parseInt(document.getElementById('single-horse').value);
+      const amount = parseInt(document.getElementById('single-chips').value);
+      if (amount > chips) return alert('チップが足りません！');
+      chips -= amount;
+      bets.push({ type: '単勝', target: `${id}番`, chips: amount, horseId: id });
+      updateChips();
+      renderBets();
+    }
+
+    function buyTrifecta() {
+      const h1 = document.getElementById('tri-1').value;
+      const h2 = document.getElementById('tri-2').value;
+      const h3 = document.getElementById('tri-3').value;
+      if (h1 === h2 || h2 === h3 || h1 === h3) return alert('異なる馬を選択してください');
+      const amount = parseInt(document.getElementById('tri-chips').value);
+      if (amount > chips) return alert('チップが足りません！');
+      chips -= amount;
+      bets.push({ type: '三連単', target: `${h1}-${h2}-${h3}`, chips: amount, combo: [parseInt(h1), parseInt(h2), parseInt(h3)] });
+      updateChips();
+      renderBets();
+    }
+
+    function updateChips() {
+      document.getElementById('chip-count').innerText = chips;
+    }
+
+    function renderBets() {
+      document.getElementById('bets-body').innerHTML = bets.map(b => `
+        <tr><td>${b.type}</td><td>${b.target}</td><td>${b.chips}枚</td></tr>
+      `).join('');
+    }
+
+    function settleRace() {
+      const r1 = parseInt(document.getElementById('res-1').value);
+      const r2 = parseInt(document.getElementById('res-2').value);
+      const r3 = parseInt(document.getElementById('res-3').value);
+
+      if (r1 === r2 || r2 === r3 || r1 === r3) return alert('1〜3着には別々の馬を選んでください');
+
+      let returnChips = 0;
+      bets.forEach(b => {
+        if (b.type === '単勝' && b.horseId === r1) {
+          const h = horses.find(item => item.id === r1);
+          returnChips += Math.floor(b.chips * h.odds);
+        } else if (b.type === '三連単' && b.combo[0] === r1 && b.combo[1] === r2 && b.combo[2] === r3) {
+          returnChips += b.chips * 50; // 固定配当倍率例
+        }
+      });
+
+      chips += returnChips;
+      updateChips();
+      document.getElementById('result-log').innerHTML = `
+        <div style="background:#222; padding:10px; border-radius:5px; border:1px solid #4caf50;">
+          <b>【結果確定】</b><br>
+          1着: ${r1}番, 2着: ${r2}番, 3着: ${r3}番<br>
+          <b>払い戻し: +${returnChips} チップ</b>
+        </div>
+      `;
+      bets = [];
+      renderBets();
+    }
+
+    function resetChips() {
+      chips = 50;
+      bets = [];
+      updateChips();
+      renderBets();
+    }
+
+    function loadHeaderMedia(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const container = document.getElementById('media-preview-area');
+      if (file.type.startsWith('video/')) {
+        container.innerHTML = `<video src="${url}" controls style="width:100%; border-radius:8px;"></video>`;
+      } else {
+        container.innerHTML = `<img src="${url}" style="width:100%; border-radius:8px; max-height:200px; object-fit:cover;">`;
+      }
+    }
+
+    function renderMediaInputs() {
+      document.getElementById('horse-media-inputs').innerHTML = horses.map(h => `
+        <div class="media-box">
+          <b>${h.id}. ${h.name} の画像変更</b><br>
+          <input type="file" accept="image/*" onchange="changeHorseImg(event, ${h.id})">
+        </div>
+      `).join('');
+    }
+
+    function changeHorseImg(e, id) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      horses.find(h => h.id === id).img = url;
+      renderHorses();
+    }
+
+    init();
+  </script>
